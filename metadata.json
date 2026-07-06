@@ -1,0 +1,6 @@
+{
+  "name": "Control de Gastos",
+  "description": "Aplicación de gestión de gastos, ingresos, préstamos y filtros por mes.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
