@@ -14,5 +14,7 @@ data class Transaction(
     val source: String? = null, // De dónde viene (para préstamos o ingresos)
     val destination: String? = null, // A dónde va (para egresos o préstamos)
     val loanPaidAmount: Double = 0.0, // Cantidad pagada del préstamo
-    val isLoanSettled: Boolean = false // Si el préstamo ya fue saldado
+    val isLoanSettled: Boolean = false, // Si el préstamo ya fue saldado
+    val loanDirection: String = "RECIBIDO", // "RECIBIDO" (me prestaron) o "OTORGADO" (presté)
+    val profileId: Int = 1 // ID del perfil al que pertenece la transacción
 )

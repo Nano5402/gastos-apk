@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.data.AppDatabase
 import com.example.data.Transaction
 import com.example.data.TransactionRepository
+import com.example.data.Profile
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -16,20 +17,48 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
 class FinanceViewModel(application: Application) : AndroidViewModel(application) {
-    private val repository: TransactionRepository
+    private val repository: TransactionRepository = TransactionRepository(
+        AppDatabase.getDatabase(application).transactionDao()
+    )
 
-    init {
-        val db = AppDatabase.getDatabase(application)
-        repository = TransactionRepository(db.transactionDao())
-    }
+    private val _isDarkMode = MutableStateFlow<Boolean?>(null) // null = system, true = dark, false = light
+    val isDarkMode: StateFlow<Boolean?> = _isDarkMode.asStateFlow()
 
-    // List of all transactions from DB
-    val allTransactions: StateFlow<List<Transaction>> = repository.allTransactions
+    private val _selectedProfile = MutableStateFlow<Profile?>(null)
+    val selectedProfile: StateFlow<Profile?> = _selectedProfile.asStateFlow()
+
+    val allProfiles: StateFlow<List<Profile>> = repository.allProfiles
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = emptyList()
         )
+
+    init {
+        // Ensure we always have at least one profile
+        viewModelScope.launch {
+            val profiles = repository.allProfiles.first()
+            if (profiles.isEmpty()) {
+                repository.insertProfile(Profile(id = 1, name = "Mi Perfil", avatarEmoji = "👤", colorHex = "#6750A4"))
+            }
+        }
+    }
+
+    // List of all transactions from DB for the selected profile
+    val allTransactions: StateFlow<List<Transaction>> = combine(
+        _selectedProfile,
+        repository.allTransactions
+    ) { profile, txList ->
+        if (profile == null) {
+            emptyList()
+        } else {
+            txList.filter { it.profileId == profile.id }
+        }
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = emptyList()
+    )
 
     // Filter states
     private val _selectedMonth = MutableStateFlow<String?>(null) // Format: "YYYY-MM" (null means current month, "TODOS" means all)
@@ -83,24 +112,35 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         var egresos = 0.0
         var prestamosRecibidos = 0.0
         var prestamosPagados = 0.0
+        var prestamosOtorgados = 0.0
+        var prestamosOtorgadosPagados = 0.0
 
         for (tx in txList) {
             when (tx.type) {
                 "INGRESO" -> ingresos += tx.amount
                 "EGRESO" -> egresos += tx.amount
                 "PRESTAMO" -> {
-                    prestamosRecibidos += tx.amount
-                    prestamosPagados += tx.loanPaidAmount
+                    if (tx.loanDirection == "OTORGADO") {
+                        prestamosOtorgados += tx.amount
+                        prestamosOtorgadosPagados += tx.loanPaidAmount
+                    } else {
+                        prestamosRecibidos += tx.amount
+                        prestamosPagados += tx.loanPaidAmount
+                    }
                 }
             }
         }
+
+        val balanceNeto = ingresos - egresos + prestamosRecibidos - prestamosOtorgados
 
         FinanceSummary(
             totalIngresos = ingresos,
             totalEgresos = egresos,
             totalPrestamos = prestamosRecibidos,
             totalPrestamosPagados = prestamosPagados,
-            balanceNeto = ingresos - egresos // Balance of actual cash flow (excluding pending debt logic or including as requested)
+            totalPrestamosOtorgados = prestamosOtorgados,
+            totalPrestamosOtorgadosPagados = prestamosOtorgadosPagados,
+            balanceNeto = balanceNeto
         )
     }.stateIn(
         scope = viewModelScope,
@@ -147,9 +187,11 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         notes: String,
         dateMillis: Long,
         source: String?,
-        destination: String?
+        destination: String?,
+        loanDirection: String = "RECIBIDO"
     ) {
         viewModelScope.launch {
+            val currentProfileId = _selectedProfile.value?.id ?: 1
             repository.insert(
                 Transaction(
                     amount = amount,
@@ -158,7 +200,9 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                     notes = notes,
                     dateMillis = dateMillis,
                     source = source,
-                    destination = destination
+                    destination = destination,
+                    loanDirection = loanDirection,
+                    profileId = currentProfileId
                 )
             )
         }
@@ -192,17 +236,75 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
                 )
             )
 
-            // 2. Automatically record an EGRESO for the payment so it shows up in monthly expenses!
-            repository.insert(
-                Transaction(
-                    amount = paymentAmount,
-                    type = "EGRESO",
-                    category = "Pago Préstamo",
-                    notes = "Pago para préstamo: '${loan.notes.ifEmpty { loan.category }}' (Acreedor: ${loan.source ?: "N/A"})",
-                    dateMillis = System.currentTimeMillis(),
-                    destination = loan.destination // Goes from the same account/destination
+            // 2. Automatically record an EGRESO/INGRESO for the payment so it shows up in monthly transactions!
+            if (loan.loanDirection == "OTORGADO") {
+                repository.insert(
+                    Transaction(
+                        amount = paymentAmount,
+                        type = "INGRESO",
+                        category = "Cobro Préstamo",
+                        notes = "Cobro de préstamo: '${loan.notes.ifEmpty { loan.category }}' (Deudor: ${loan.destination ?: "N/A"})",
+                        dateMillis = System.currentTimeMillis(),
+                        source = loan.source,
+                        profileId = loan.profileId
+                    )
+                )
+            } else {
+                repository.insert(
+                    Transaction(
+                        amount = paymentAmount,
+                        type = "EGRESO",
+                        category = "Pago Préstamo",
+                        notes = "Pago para préstamo: '${loan.notes.ifEmpty { loan.category }}' (Acreedor: ${loan.source ?: "N/A"})",
+                        dateMillis = System.currentTimeMillis(),
+                        destination = loan.destination,
+                        profileId = loan.profileId
+                    )
+                )
+            }
+        }
+    }
+
+    fun selectProfile(profile: Profile?) {
+        _selectedProfile.value = profile
+    }
+
+    fun addProfile(name: String, emoji: String, colorHex: String) {
+        viewModelScope.launch {
+            repository.insertProfile(
+                Profile(
+                    name = name,
+                    avatarEmoji = emoji,
+                    colorHex = colorHex
                 )
             )
+        }
+    }
+
+    fun updateProfile(id: Int, name: String, emoji: String, colorHex: String) {
+        viewModelScope.launch {
+            val updated = Profile(id = id, name = name, avatarEmoji = emoji, colorHex = colorHex)
+            repository.updateProfile(updated)
+            if (_selectedProfile.value?.id == id) {
+                _selectedProfile.value = updated
+            }
+        }
+    }
+
+    fun deleteProfile(profile: Profile) {
+        viewModelScope.launch {
+            repository.deleteProfileById(profile.id)
+            if (_selectedProfile.value?.id == profile.id) {
+                _selectedProfile.value = null
+            }
+        }
+    }
+
+    fun toggleDarkMode() {
+        _isDarkMode.value = when (_isDarkMode.value) {
+            true -> false
+            false -> true
+            else -> true
         }
     }
 
@@ -234,8 +336,10 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
 data class FinanceSummary(
     val totalIngresos: Double = 0.0,
     val totalEgresos: Double = 0.0,
-    val totalPrestamos: Double = 0.0,
-    val totalPrestamosPagados: Double = 0.0,
+    val totalPrestamos: Double = 0.0, // Me prestaron
+    val totalPrestamosPagados: Double = 0.0, // He pagado de lo que me prestaron
+    val totalPrestamosOtorgados: Double = 0.0, // Yo presté
+    val totalPrestamosOtorgadosPagados: Double = 0.0, // Me han pagado de lo que presté
     val balanceNeto: Double = 0.0
 )
 

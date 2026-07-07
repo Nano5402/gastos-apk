@@ -3,6 +3,6 @@
     <item
         android:width="66dp"
         android:height="66dp"
-        android:drawable="@drawable/ic_finance_logo_1783363559882"
+        android:drawable="@drawable/app_launcher_piggy_1783433072037"
         android:gravity="center" />
 </layer-list>

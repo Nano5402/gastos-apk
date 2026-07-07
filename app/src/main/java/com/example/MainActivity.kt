@@ -14,15 +14,22 @@ import com.example.ui.FinanceViewModel
 import com.example.ui.FinanceViewModelFactory
 import com.example.ui.theme.MyApplicationTheme
 
+import androidx.compose.runtime.collectAsState
+import androidx.compose.foundation.isSystemInDarkTheme
+
 class MainActivity : ComponentActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     enableEdgeToEdge()
     setContent {
-      MyApplicationTheme {
-        val viewModel: FinanceViewModel = viewModel(
-          factory = FinanceViewModelFactory(application)
-        )
+      val viewModel: FinanceViewModel = viewModel(
+        factory = FinanceViewModelFactory(application)
+      )
+      val isDarkModeState = viewModel.isDarkMode.collectAsState()
+      val systemInDark = isSystemInDarkTheme()
+      val useDarkTheme = isDarkModeState.value ?: systemInDark
+
+      MyApplicationTheme(darkTheme = useDarkTheme) {
         Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
           FinanceDashboardScreen(
             viewModel = viewModel,

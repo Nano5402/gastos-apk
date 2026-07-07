@@ -13,17 +13,19 @@ import androidx.compose.ui.graphics.Color
 
 private val DarkColorScheme =
   darkColorScheme(
-    primary = GlassPrimary,
-    secondary = GlassSecondary,
-    tertiary = GlassTertiary,
-    background = GlassBackground,
-    surface = GlassSurface,
-    surfaceVariant = GlassSurfaceVariant,
-    onPrimary = Color.White,
-    onBackground = GlassOnBackground,
-    onSurface = GlassOnSurface,
-    onSurfaceVariant = GlassOnSurfaceVariant,
-    outline = GlassBorder
+    primary = DarkGlassPrimary,
+    secondary = DarkGlassSecondary,
+    tertiary = DarkGlassTertiary,
+    background = DarkGlassBackground,
+    surface = DarkGlassSurface,
+    surfaceVariant = DarkGlassSurfaceVariant,
+    onPrimary = Color.Black,
+    onPrimaryContainer = DarkGlassOnPrimaryContainer,
+    primaryContainer = DarkGlassPrimaryContainer,
+    onBackground = DarkGlassOnBackground,
+    onSurface = DarkGlassOnSurface,
+    onSurfaceVariant = DarkGlassOnSurfaceVariant,
+    outline = DarkGlassBorder
   )
 
 private val LightColorScheme =
@@ -57,7 +59,7 @@ fun MyApplicationTheme(
         if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
       }
 
-      darkTheme -> LightColorScheme // Use light/cohesive palette for the specified frosted glass look
+      darkTheme -> DarkColorScheme
       else -> LightColorScheme
     }
 
