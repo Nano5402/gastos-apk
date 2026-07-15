@@ -61,7 +61,8 @@ fun FinanceDashboardScreen(
             onEditProfile = { id, name, emoji, color -> viewModel.updateProfile(id, name, emoji, color) },
             onDeleteProfile = { viewModel.deleteProfile(it) },
             isDarkMode = useDarkTheme,
-            onToggleDarkMode = { viewModel.toggleDarkMode() }
+            onToggleDarkMode = { viewModel.toggleDarkMode() },
+            modifier = modifier
         )
     } else {
         val transactions by viewModel.filteredTransactions.collectAsState()
@@ -319,7 +320,7 @@ fun FinanceDashboardScreen(
                 )
             }
         },
-        modifier = modifier
+        modifier = Modifier.fillMaxSize()
     ) { innerPadding ->
         Box(
             modifier = Modifier
@@ -405,7 +406,7 @@ fun FinanceDashboardScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "Transacciones del Mes",
+                                text = if (activeMonth == "TODOS") "Todas las Transacciones" else "Transacciones de ${viewModel.formatMonthDisplay(activeMonth)}",
                                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                                 color = MaterialTheme.colorScheme.onBackground
                             )
@@ -1322,8 +1323,8 @@ fun TransactionItem(
                         }
                         Text(
                             text = formatDate(transaction.dateMillis),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.outline
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f)
                         )
                     }
                 }
@@ -2330,14 +2331,15 @@ fun ProfileSelectionScreen(
     onEditProfile: (Int, String, String, String) -> Unit,
     onDeleteProfile: (com.example.data.Profile) -> Unit,
     isDarkMode: Boolean,
-    onToggleDarkMode: () -> Unit
+    onToggleDarkMode: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     var showAddDialog by remember { mutableStateOf(false) }
     var profileToEdit by remember { mutableStateOf<com.example.data.Profile?>(null) }
     var profileToDelete by remember { mutableStateOf<com.example.data.Profile?>(null) }
 
     Box(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxSize()
             .background(
                 Brush.verticalGradient(
@@ -2370,6 +2372,7 @@ fun ProfileSelectionScreen(
                     center = androidx.compose.ui.geometry.Offset(size.width, size.height * 0.85f)
                 )
             }
+            .safeDrawingPadding()
             .padding(24.dp)
     ) {
         Column(

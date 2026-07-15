@@ -30,12 +30,10 @@ class MainActivity : ComponentActivity() {
       val useDarkTheme = isDarkModeState.value ?: systemInDark
 
       MyApplicationTheme(darkTheme = useDarkTheme) {
-        Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-          FinanceDashboardScreen(
-            viewModel = viewModel,
-            modifier = Modifier.padding(innerPadding)
-          )
-        }
+        FinanceDashboardScreen(
+          viewModel = viewModel,
+          modifier = Modifier.fillMaxSize()
+        )
       }
     }
   }

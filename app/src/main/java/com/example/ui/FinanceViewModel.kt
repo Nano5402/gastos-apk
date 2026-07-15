@@ -21,6 +21,8 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         AppDatabase.getDatabase(application).transactionDao()
     )
 
+    private val prefs = application.getSharedPreferences("finance_prefs", android.content.Context.MODE_PRIVATE)
+
     private val _isDarkMode = MutableStateFlow<Boolean?>(null) // null = system, true = dark, false = light
     val isDarkMode: StateFlow<Boolean?> = _isDarkMode.asStateFlow()
 
@@ -35,11 +37,37 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         )
 
     init {
-        // Ensure we always have at least one profile
+        // Load dark mode preference
+        val savedDarkMode = prefs.getString("dark_mode", "system")
+        _isDarkMode.value = when (savedDarkMode) {
+            "dark" -> true
+            "light" -> false
+            else -> null
+        }
+
+        // Ensure we always have at least one profile and auto-select last profile
         viewModelScope.launch {
-            val profiles = repository.allProfiles.first()
-            if (profiles.isEmpty()) {
-                repository.insertProfile(Profile(id = 1, name = "Mi Perfil", avatarEmoji = "👤", colorHex = "#6750A4"))
+            repository.allProfiles.collect { profiles ->
+                if (profiles.isEmpty()) {
+                    repository.insertProfile(Profile(id = 1, name = "Mi Perfil", avatarEmoji = "👤", colorHex = "#6750A4"))
+                } else {
+                    if (_selectedProfile.value == null) {
+                        val savedId = prefs.getInt("selected_profile_id", -1)
+                        if (savedId != -1) {
+                            val savedProfile = profiles.find { it.id == savedId }
+                            if (savedProfile != null) {
+                                _selectedProfile.value = savedProfile
+                            }
+                        }
+                    } else {
+                        // Keep current profile updated if it changes in database
+                        val currentId = _selectedProfile.value?.id
+                        val updatedProfile = profiles.find { it.id == currentId }
+                        if (updatedProfile != null && updatedProfile != _selectedProfile.value) {
+                            _selectedProfile.value = updatedProfile
+                        }
+                    }
+                }
             }
         }
     }
@@ -267,6 +295,7 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
 
     fun selectProfile(profile: Profile?) {
         _selectedProfile.value = profile
+        prefs.edit().putInt("selected_profile_id", profile?.id ?: -1).apply()
     }
 
     fun addProfile(name: String, emoji: String, colorHex: String) {
@@ -295,17 +324,23 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         viewModelScope.launch {
             repository.deleteProfileById(profile.id)
             if (_selectedProfile.value?.id == profile.id) {
-                _selectedProfile.value = null
+                selectProfile(null)
             }
         }
     }
 
     fun toggleDarkMode() {
-        _isDarkMode.value = when (_isDarkMode.value) {
+        val newValue = when (_isDarkMode.value) {
             true -> false
             false -> true
             else -> true
         }
+        _isDarkMode.value = newValue
+        prefs.edit().putString("dark_mode", when (newValue) {
+            true -> "dark"
+            false -> "light"
+            else -> "system"
+        }).apply()
     }
 
     // Helper functions for month formats
